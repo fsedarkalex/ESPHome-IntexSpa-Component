@@ -792,12 +792,26 @@ void IntexSpa::data_management_() {
   const bool power_on        = (status_cmd & BIT_POWER)          != 0;
   const bool heater_standby  = (status_cmd & BIT_HEATER_STANDBY) != 0;
   const bool heater_on       = (status_cmd & BIT_HEATER_ON)      != 0;
-  state_filter_              = (status_cmd & BIT_WATER_FILTER)   != 0;
+  bool new_state_filter      = (status_cmd & BIT_WATER_FILTER)   != 0;
   const bool bubble_on       = (status_cmd & BIT_BUBBLE)         != 0;
   const bool water_jet_on    = (model_ == MODEL_28458) && ((status_cmd & BIT_WATER_JET) != 0);
-  state_sanitizer_           = (model_ == MODEL_28458) && ((status_cmd & BIT_SANITIZER) != 0);
+  bool new_state_sanitizer   = (model_ == MODEL_28458) && ((status_cmd & BIT_SANITIZER) != 0);
   fahrenheit_                = (status_flag & BIT_FAHRENHEIT)    != 0;
   command_received_          = (status_flag & BIT_CMD_RECEIVED)  != 0;
+
+  // DIAGNOSTIC: dump the full raw frame whenever filter/sanitizer status
+  // flips, so an unexpected "off" blip can be traced back to real byte
+  // content instead of guessed at. Safe/read-only, no behavior change.
+  if (new_state_filter != state_filter_ || new_state_sanitizer != state_sanitizer_) {
+    ESP_LOGW(TAG, "Status change: filter %d->%d, sanitizer %d->%d | raw frame: "
+             "%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+             (int)state_filter_, (int)new_state_filter,
+             (int)state_sanitizer_, (int)new_state_sanitizer,
+             data_[0],data_[1],data_[2],data_[3],data_[4],data_[5],data_[6],data_[7],data_[8],
+             data_[9],data_[10],data_[11],data_[12],data_[13],data_[14],data_[15],data_[16]);
+  }
+  state_filter_    = new_state_filter;
+  state_sanitizer_ = new_state_sanitizer;
 
   // Always update actual tracked values so process_command_queue_ can compare
   actual_setpoint_temp_  = setpt_temp;

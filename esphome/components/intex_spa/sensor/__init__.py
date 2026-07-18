@@ -27,6 +27,7 @@ CONFIG_SCHEMA = cv.Schema(
         # error_code: diagnostic entity
         cv.Optional(CONF_ERROR_CODE): sensor.sensor_schema(
             accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
             icon="mdi:alert-circle-outline",
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
@@ -34,11 +35,13 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_FILTER_REMAINING): sensor.sensor_schema(
             unit_of_measurement="h",
             accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
             icon="mdi:timer-outline",
         ),
         cv.Optional(CONF_SANITIZER_REMAINING): sensor.sensor_schema(
             unit_of_measurement="h",
             accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
             icon="mdi:timer-outline",
         ),
     }
