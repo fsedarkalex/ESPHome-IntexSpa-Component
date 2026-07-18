@@ -1,17 +1,20 @@
 # Intex® PureSpa remote control for Home Automation
 
-**Control your PureSpa with a simple ESPHome device** for Non-WiFi, wireless controlled Spas.
-No Hardware-Mod on Spa-side necessary!
+**Control your PureSpa with a simple ESPHome device** - for Non-WiFi, wireless controlled Spas.
+
+No Hardware-Mod on Spa-side neccessary!
 
 ![Screenshot](images/Screenshot1.png) ![Screenshot](images/Screenshot2.png) ![Screenshot](images/Screenshot3.png)
 
 ## Credits & AI-Disclosure
 Thanks to the awesome work of [Yogui79](https://github.com/Yogui79/IntexPureSpa) I was able to create this ESPHome component.
-As I know virtually nothing about python ort esphome, this was created with heavy AI-Support. Like it or not: Nobody forces you to use it.
+
+As I know virtually nothing about python ort esphome, this was created with heavy AI-Support (Claude). Like it or not: Nobody forces you to use it.
 
 ## Hardware
 You need an ESP32 DevKit V4 Board (others are not tested, according to Yogui79 V1 are not working), like [this one](https://www.amazon.de/dp/B0DJ2ZCZT7).
-You also neet an LC12s tranceiver like [that one](https://www.amazon.de/5PCS-LC12S-UART-Serial-Module/dp/B0CSCNS53J) - make sure it is actually LC12s! There is a similar board that will not work.
+
+You also need an LC12s tranceiver like [that one](https://www.amazon.de/5PCS-LC12S-UART-Serial-Module/dp/B0CSCNS53J) - make sure it is actually LC12s! There is a similar board that will not work.
 
 ### Pinout
 
@@ -29,11 +32,11 @@ Connect the LC12s as follows:
 ![ESP32 to LC12s](images/Pinouts_ESP32-LC12s_v1.jpg)
 
 ## Preparation
-You need to find out your individual ChannelID and NrtworkID. See and use [Yogui79's tools](https://github.com/Yogui79/IntexPureSpa/tree/main#channel-and-network-id-detection) for that.
+You need to find out your individual ChannelID and NetworkID. See and use [Yogui79's tools](https://github.com/Yogui79/IntexPureSpa/tree/main#channel-and-network-id-detection) for that.
 
 ## Setup
 In ESPHome Builder, create a configuration for the new board.
-There is an example attached but most impprtantly you will need the following blocks:
+There is an [example](full_example_config.yaml) attached but most importantly you will need the following blocks:
 
 ```yaml
 # Add the Intex Spa component from fsedarkalex' repo
@@ -64,3 +67,7 @@ intex_spa:
   set_pin:    19        # LC12S SET (default GPIO19)
   active_scan: true     # true = send life signal during scan (faster); false = passive listen only (slow)
 ```
+
+This will enable the communication with the whirlpool. Next you will need to define the controls to export to HomeAssistant.
+
+Have a look at the [Full Example](full_example_config.yaml) to see the available options.
