@@ -1,0 +1,279 @@
+esphome:
+  name: whirlpool-controller
+  friendly_name: Whirlpool-Controller
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "ENTER_YOUR_KEY"
+  homeassistant_services: true
+
+ota:
+  - platform: esphome
+    password: "SOME_OTA_PASSWORD_HERE"
+
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Intex-Whirlpool"
+    password: "SECURE_FALLBACK_PASS"
+
+captive_portal:
+
+# Add the Intex Spa component from fsedarkalex' repo
+external_components:
+  - source: github://fsedarkalex/ESPHome-IntexSpa-Component
+    components: [ intex_spa ]
+
+# The LC12s interface
+uart:
+  id: lc12s
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 9600
+  rx_buffer_size: 256
+
+# The actual spa component
+intex_spa:
+  id: my_spa
+  uart_id: lc12s
+  network_id: 0x1A2B    # <-- Enter yopur network ID
+  channel:    0x2A      # <-- Enter your Channel
+  model:      28458     # 28458 (with Waterjet+Sanitizer) OR 28442 if no sanitizer and jet
+  cs_pin:     18        # LC12S CS  (default GPIO18)
+  set_pin:    19        # LC12S SET (default GPIO19)
+  active_scan: true     # true = send life signal during scan (faster); false = passive listen only (slow)
+
+
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  CLIMATE – heater represented as a HA climate entity
+#  Mode "Auto" = heater enabled (pump thermostat decides when to heat)
+#  Mode "Off"  = heater disabled
+#  Target temperature is set directly on the climate card.
+# ════════════════════════════════════════════════════════════════════════════
+climate:
+  - platform: intex_spa
+    intex_spa_id: my_spa
+    name: "Spa Heater"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  SENSORS
+# ════════════════════════════════════════════════════════════════════════════
+sensor:
+  - platform: intex_spa
+    intex_spa_id: my_spa
+
+    actual_temperature:
+      name: "Water Temperature"
+
+    # Diagnostic – raw error code (0 = no error).
+    # The on_value trigger sends a HA persistent notification for each error.
+    error_code:
+      name: "Error Code"
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return x > 0;'
+              then:
+                - homeassistant.service:
+                    service: persistent_notification.create
+                    data:
+                      notification_id: intex_spa_error
+                      title: !lambda |-
+                        switch ((int)x) {
+                          case 90: return "Intex PureSpa - No Water Flow";
+                          case 91: return "Intex PureSpa - Salt Level Low";
+                          case 92: return "Intex PureSpa - Salt Level High";
+                          case 94: return "Intex PureSpa - Water Temp Too Low";
+                          case 95: return "Intex PureSpa - Water Temp Too High";
+                          case 96: return "Intex PureSpa - System Error";
+                          case 97: return "Intex PureSpa - Dry-Fire Protection";
+                          case 99: return "Intex PureSpa - Temp Sensor Fault";
+                          default: return "Intex PureSpa - Unknown Error";
+                        }
+                      message: !lambda |-
+                        switch ((int)x) {
+                          case 90: return "E90: No water flowing. Check pump and valves.";
+                          case 91: return "E91: Salt < 2500 ppm. Add pool salt and run filter.";
+                          case 92: return "E92: Salt > 2500 ppm. Dilute with fresh water.";
+                          case 94: return "E94: Water dangerously cold. Replug GFCI/RCD.";
+                          case 95: return "E95: Water ~50C. Turn off heater, remove cover.";
+                          case 96: return "E96: System error. Restart pump or contact support.";
+                          case 97: return "E97: Heater ran dry. Check water level first.";
+                          case 99: return "E99: Temperature sensor broken. Contact Intex.";
+                          default: return "Unknown error. Check spa status.";
+                        }
+              else:
+                - homeassistant.service:
+                    service: persistent_notification.dismiss
+                    data:
+                      notification_id: intex_spa_error
+
+    # Remaining runtime reported by the pump (updates live)
+    filter_remaining:
+      name: "Filter Time Remaining"
+
+    sanitizer_remaining:    # Model 28458 only
+      name: "Sanitizer Time Remaining"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  BINARY SENSORS
+# ════════════════════════════════════════════════════════════════════════════
+binary_sensor:
+  - platform: intex_spa
+    intex_spa_id: my_spa
+
+    # True only when heating element is actively running
+    # (red flame symbol lit on the remote control)
+    heater_active:
+      name: "Heater Active"
+
+    water_filter:
+      name: "Water Filter Active"
+
+    bubble:
+      name: "Bubble Jets Active"
+
+    water_jet:              # Model 28458 only
+      name: "Water Jets Active"
+
+    sanitizer:              # Model 28458 only
+      name: "Sanitizer Active"
+
+    # Diagnostic – becomes 'on' when the pump cannot be reached for > 10 s
+    communication_error:
+      name: "Communication Error"
+      on_state:
+        - if:
+            condition:
+              lambda: 'return x;'
+            then:
+              - homeassistant.service:
+                  service: persistent_notification.create
+                  data:
+                    notification_id: intex_spa_comm
+                    title: "Intex PureSpa - Connection Lost"
+                    message: "Pump unreachable. Check power and LC12S module."
+            else:
+              - homeassistant.service:
+                  service: persistent_notification.dismiss
+                  data:
+                    notification_id: intex_spa_comm
+
+    # spa_active = pump online AND spa power on
+    spa_active:
+      name: "Spa Active"
+      id: spa_active_sensor
+
+    # Diagnostic – true while channel auto-scan is running (after 90s without data)
+    channel_scanning:
+      name: "Channel Scanning"
+
+    is_sending:
+      name: "Sending Command"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  SWITCHES
+#  Power, Bubble, Water Jet: plain toggle switches.
+#  Fahrenheit Mode: configuration entity (shown in HA under Settings).
+#
+#  Unavailability note:
+#  ESPHome has no native per-entity unavailable API. The reliable approach is
+#  the HA customize.yaml availability_template below – it reads the spa_active
+#  binary sensor and marks entities unavailable when the spa is off or offline.
+# ════════════════════════════════════════════════════════════════════════════
+switch:
+  - platform: intex_spa
+    intex_spa_id: my_spa
+
+    power:
+      name: "Spa Power"
+
+    bubble:
+      name: "Bubble Jets"
+
+    water_jet:              # Model 28458 only
+      name: "Water Jets"
+
+    # Entity category "config" → shown under Settings in HA, not on the dashboard
+    # Please remember to change the unit in this config if you switch between C and F.
+    fahrenheit_mode:
+      name: "Fahrenheit Mode"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  SELECT – timer dropdowns
+#
+#  Filter:    Off / 2h / 4h / 6h   (only these values are accepted by pump)
+#  Sanitizer: Off / 3h / 5h / 8h   (model 28458 only)
+#
+#  The dropdown updates automatically to reflect the remaining time
+#  reported by the pump.
+# ════════════════════════════════════════════════════════════════════════════
+select:
+  - platform: intex_spa
+    intex_spa_id: my_spa
+
+    filter_timer:
+      name: "Filter Timer"
+
+    sanitizer_timer:        # Model 28458 only
+      name: "Sanitizer Timer"
+
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  HOME ASSISTANT NOTIFICATIONS
+#
+#  HA persistent notifications are sent via the on_value trigger on the
+#  error_code sensor below. This is the only reliable approach – all direct
+#  C++ API server call methods have changed repeatedly across ESPHome versions.
+#
+#  Requires 'homeassistant_services: true' in the api: block (already set).
+# ════════════════════════════════════════════════════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════════
+#  HOME ASSISTANT: AVAILABILITY VIA customize.yaml
+#
+#  ESPHome has no native per-entity unavailable API (open feature request).
+#  The reliable solution: add the following to your HA configuration/
+#  customize.yaml. This uses the spa_active binary sensor as the availability
+#  source for all controls. When spa_active is off (pump offline or power off),
+#  HA marks all listed entities as "unavailable" in the UI.
+#
+#  In configuration.yaml, make sure you have:
+#    homeassistant:
+#      customize: !include customize.yaml
+#
+#  Then in customize.yaml:
+#
+#  switch.spa_power:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#  switch.bubble_jets:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#  switch.water_jets:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#  select.filter_timer:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#  select.sanitizer_timer:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#  climate.spa_heater:
+#    availability_template: "{{ is_state('binary_sensor.spa_active', 'on') }}"
+#
+#  Replace entity IDs with your actual HA entity IDs (depends on device name).
+# ════════════════════════════════════════════════════════════════════════════
