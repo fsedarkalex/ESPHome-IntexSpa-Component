@@ -120,6 +120,12 @@ void IntexSpa::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Intex PureSpa (network_id=0x%04X, channel=0x%02X, model=%d)",
                 network_id_, channel_, model_);
 
+  // Publish a defined initial "off" state for is_sending – it's otherwise
+  // only ever set false on a busy->idle transition, which never happens if
+  // no command has been sent yet, leaving it stuck on ESPHome's "unknown"
+  // state indefinitely. is_busy_ is always false at boot, so this is safe.
+  if (is_sending_bs_) is_sending_bs_->publish_state(false);
+
   // Configure LC12S control pins using esp-idf GPIO driver (not Arduino)
   // Reset pins first to ensure clean state before reconfiguring
   gpio_reset_pin(static_cast<gpio_num_t>(cs_pin_));
@@ -378,6 +384,11 @@ void IntexSpa::loop() {
       scan_state_   = ScanState::IDLE;
       ESP_LOGI(TAG, "First frame received – channel 0x%02X confirmed", channel_);
       if (scanning_bs_) scanning_bs_->publish_state(false);
+      // Explicitly set to "off" on the very first successful frame – if
+      // comm_error_ was never true (the normal happy path), the recovery
+      // block above never runs and this binary_sensor would otherwise sit
+      // in ESPHome's "unknown" state forever instead of a defined "off".
+      if (comm_error_bs_) comm_error_bs_->publish_state(false);
     }
     last_good_channel_ = channel_;
 
