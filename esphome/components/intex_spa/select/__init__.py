@@ -18,7 +18,7 @@ CONFIG_SCHEMA = cv.Schema(
 
         cv.Optional(CONF_FILTER_TIMER): select.select_schema(
             SpaTimerSelect,
-            icon="mdi:filter-clock",
+            icon="mdi:filter-settings",
         ),
         # sanitizer_timer only makes sense for model 28458
         cv.Optional(CONF_SANITIZER_TIMER): select.select_schema(

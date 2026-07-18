@@ -21,7 +21,7 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_BUBBLE): switch.switch_schema(
             SpaSwitch,
-            icon="mdi:bubble",
+            icon="mdi:chart-bubble",
         ),
         cv.Optional(CONF_WATER_JET): switch.switch_schema(
             SpaSwitch,

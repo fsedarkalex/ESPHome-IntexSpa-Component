@@ -27,7 +27,7 @@ CONFIG_SCHEMA = cv.Schema(
             icon="mdi:filter",
         ),
         cv.Optional(CONF_BUBBLE): binary_sensor.binary_sensor_schema(
-            icon="mdi:bubble",
+            icon="mdi:chart-bubble",
         ),
         cv.Optional(CONF_WATER_JET): binary_sensor.binary_sensor_schema(
             icon="mdi:waves",
