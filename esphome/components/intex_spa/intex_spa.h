@@ -367,15 +367,23 @@ class IntexSpa : public Component, public uart::UARTDevice {
 
   // Re-anchors on value change (persisting to NVS if a valid RTC is
   // available) and returns the current extrapolated estimate in hours.
-  float update_hour_estimate_(uint8_t current_raw, uint8_t &mark_value,
+  // `active` reflects the pump's own on/off status bit for this function
+  // (e.g. state_filter_). Treating "off" as an effective raw value of 0
+  // guarantees that ANY off->on transition is seen as a value change and
+  // triggers a fresh re-anchor – even if the new cycle happens to start at
+  // the exact same hour count as an older, stale NVS-persisted anchor
+  // (e.g. "4h" selected again later), which would otherwise be mistaken
+  // for a continuation of the old, long-expired countdown.
+  float update_hour_estimate_(bool active, uint8_t current_raw, uint8_t &mark_value,
                                uint32_t &mark_millis, uint32_t &mark_epoch,
                                ESPPreferenceObject &pref) {
+    uint8_t effective_raw = active ? current_raw : 0;
     bool     time_valid = (time_id_ != nullptr) && time_id_->now().is_valid();
     uint32_t now_epoch   = time_valid ? static_cast<uint32_t>(time_id_->now().timestamp) : 0;
     uint32_t now_ms       = millis();
 
-    if (current_raw != mark_value) {
-      mark_value  = current_raw;
+    if (effective_raw != mark_value) {
+      mark_value  = effective_raw;
       mark_millis = now_ms;
       mark_epoch  = now_epoch;  // 0 if no RTC yet – falls back to millis() below
       if (time_valid) {
@@ -405,7 +413,7 @@ class IntexSpa : public Component, public uart::UARTDevice {
     int total_minutes = static_cast<int>(hours * 60.0f + 0.5f);  // round to nearest minute
     int h = total_minutes / 60;
     int m = total_minutes % 60;
-    char buf[8];
+    char buf[16];  // large enough for any int range, silences -Wformat-truncation
     snprintf(buf, sizeof(buf), "%d:%02d", h, m);
     return std::string(buf);
   }

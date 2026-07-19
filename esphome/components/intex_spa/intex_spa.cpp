@@ -139,14 +139,14 @@ void IntexSpa::setup() {
     if (filter_mark_pref_.load(&hm) && hm.hour_value <= 8) {
       filter_hour_mark_value_ = hm.hour_value;
       filter_hour_mark_epoch_ = hm.epoch_time;
-      ESP_LOGI(TAG, "Restored filter hour-mark from NVS: %d h @ epoch %u",
-               hm.hour_value, hm.epoch_time);
+      ESP_LOGI(TAG, "Restored filter hour-mark from NVS: %d h @ epoch %lu",
+               hm.hour_value, (unsigned long)hm.epoch_time);
     }
     if (sanitizer_mark_pref_.load(&hm) && hm.hour_value <= 8) {
       sanitizer_hour_mark_value_ = hm.hour_value;
       sanitizer_hour_mark_epoch_ = hm.epoch_time;
-      ESP_LOGI(TAG, "Restored sanitizer hour-mark from NVS: %d h @ epoch %u",
-               hm.hour_value, hm.epoch_time);
+      ESP_LOGI(TAG, "Restored sanitizer hour-mark from NVS: %d h @ epoch %lu",
+               hm.hour_value, (unsigned long)hm.epoch_time);
     }
   }
 
@@ -871,8 +871,10 @@ void IntexSpa::data_management_() {
 
     // Sub-hour estimate: re-anchors on value change (persisted to NVS when a
     // real-time clock is available) and extrapolates between pump updates,
-    // formatted as "H:MM" for the text sensor.
-    float filter_est = update_hour_estimate_(filter_h, filter_hour_mark_value_,
+    // formatted as "H:MM" for the text sensor. "active" (state_filter_/
+    // state_sanitizer_) forces a fresh anchor on every off->on transition –
+    // see update_hour_estimate_ for why this matters.
+    float filter_est = update_hour_estimate_(state_filter_, filter_h, filter_hour_mark_value_,
                                               filter_hour_mark_millis_, filter_hour_mark_epoch_,
                                               filter_mark_pref_);
     if (filter_remaining_hm_ts_) {
@@ -880,7 +882,7 @@ void IntexSpa::data_management_() {
       if (filter_remaining_hm_ts_->state != hm) filter_remaining_hm_ts_->publish_state(hm);
     }
 
-    float sanit_est = update_hour_estimate_(sanit_h, sanitizer_hour_mark_value_,
+    float sanit_est = update_hour_estimate_(state_sanitizer_, sanit_h, sanitizer_hour_mark_value_,
                                              sanitizer_hour_mark_millis_, sanitizer_hour_mark_epoch_,
                                              sanitizer_mark_pref_);
     if (sanitizer_remaining_hm_ts_) {
