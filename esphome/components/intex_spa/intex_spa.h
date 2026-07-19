@@ -217,6 +217,12 @@ class IntexSpa : public Component, public uart::UARTDevice {
   uint16_t rx_state_{0};
   uint8_t  data_[SIZE_PUMP_DATA + 2]{};
   uint8_t  data_controller_[SIZE_CONTROLLER_DATA + 2]{};
+  // Stable copy of the most recently completed, CRC-valid pump frame.
+  // data_management_() reads from this, NOT from data_[] directly, since
+  // data_[] keeps getting overwritten by the parser as soon as more bytes
+  // arrive (which can happen within the same RX-drain batch, before
+  // data_management_() gets a chance to run – see read_data_() for details).
+  uint8_t  pump_frame_snapshot_[SIZE_PUMP_DATA]{};
   uint16_t data_counter_{0};
   bool     finish_pump_message_{false};
   bool     finish_controller_message_{false};
