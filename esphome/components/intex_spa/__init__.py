@@ -24,6 +24,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import uart, time
 from esphome.const import CONF_ID, CONF_TIME_ID
+from esphome.core import CORE
 
 CODEOWNERS = ["@Yogui79"]
 DEPENDENCIES = ["uart", "api"]
@@ -54,7 +55,11 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_SET_PIN,     default=19):   cv.uint8_t,
             cv.Optional(CONF_ACTIVE_SCAN, default=True): cv.boolean,
             # Optional real-time clock (e.g. `time: - platform: homeassistant`
-            # or `sntp`). Without it, the filter/sanitizer sub-hour estimate
+            # or `sntp`). If omitted here, any `time:` platform configured
+            # elsewhere in the YAML is auto-detected and used automatically –
+            # no explicit wiring needed unless you have multiple time sources
+            # and want to pick a specific one via time_id.
+            # Without any RTC at all, the filter/sanitizer sub-hour estimate
             # still works but resets its progress on every reboot instead of
             # surviving it via NVS.
             cv.Optional(CONF_TIME_ID):                   cv.use_id(time.RealTimeClock),
@@ -80,3 +85,13 @@ async def to_code(config):
     if CONF_TIME_ID in config:
         time_var = await cg.get_variable(config[CONF_TIME_ID])
         cg.add(var.set_time_id(time_var))
+    else:
+        # No explicit time_id given – auto-detect any configured `time:`
+        # platform (e.g. `time: - platform: homeassistant`) and wire it up
+        # automatically, so the user doesn't need to reference it by hand.
+        # Uses the first one found if multiple time platforms are configured;
+        # set `time_id:` explicitly under intex_spa: to pick a specific one.
+        time_confs = CORE.config.get("time", [])
+        if time_confs:
+            time_var = await cg.get_variable(time_confs[0][CONF_ID])
+            cg.add(var.set_time_id(time_var))
