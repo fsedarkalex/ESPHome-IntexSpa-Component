@@ -799,6 +799,16 @@ void IntexSpa::read_data_(uint8_t c) {
         uint16_t crc = calc_crc_(data_, SIZE_PUMP_DATA - 2);
         if (data_[SIZE_PUMP_DATA - 2] == ((crc & 0xFF00) >> 8) &&
             data_[SIZE_PUMP_DATA - 1] ==  (crc & 0x00FF)) {
+          // Snapshot immediately into a stable buffer. The RX drain loop in
+          // loop() can process several frames' worth of bytes (or a partial
+          // next frame) in a single pass BEFORE data_management_() gets to
+          // run – case 0's memset() would otherwise wipe data_[] out from
+          // under us in that window, and data_management_() could end up
+          // reading a zeroed/garbage buffer instead of this frame's real
+          // content (an all-zero payload trivially passes CRC-XMODEM too,
+          // since CRC(all zeros) = 0x0000 – so this isn't just corrupted
+          // data, it looks "valid" and gets processed as if it were real).
+          memcpy(pump_frame_snapshot_, data_, SIZE_PUMP_DATA);
           finish_pump_message_ = true;
         } else {
           ESP_LOGD(TAG, "CRC mismatch: expected 0x%04X, got 0x%02X%02X – frame dropped",
@@ -815,13 +825,13 @@ void IntexSpa::read_data_(uint8_t c) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void IntexSpa::data_management_() {
-  const uint8_t status_cmd  = data_[BYTE_STATUS_COMMAND];
-  const uint8_t status_flag = data_[BYTE_STATUS_FLAGS];
-  const uint8_t actual_temp = data_[BYTE_ACTUAL_TEMP];
-  const uint8_t setpt_temp  = data_[BYTE_SETPOINT_TEMP];
-  const uint8_t filter_h    = data_[BYTE_FILTER_TIME];
-  const uint8_t sanit_h     = (model_ == MODEL_28458) ? data_[BYTE_SANITIZER_TIME] : 0;
-  const uint8_t error_code  = data_[BYTE_ERROR];
+  const uint8_t status_cmd  = pump_frame_snapshot_[BYTE_STATUS_COMMAND];
+  const uint8_t status_flag = pump_frame_snapshot_[BYTE_STATUS_FLAGS];
+  const uint8_t actual_temp = pump_frame_snapshot_[BYTE_ACTUAL_TEMP];
+  const uint8_t setpt_temp  = pump_frame_snapshot_[BYTE_SETPOINT_TEMP];
+  const uint8_t filter_h    = pump_frame_snapshot_[BYTE_FILTER_TIME];
+  const uint8_t sanit_h     = (model_ == MODEL_28458) ? pump_frame_snapshot_[BYTE_SANITIZER_TIME] : 0;
+  const uint8_t error_code  = pump_frame_snapshot_[BYTE_ERROR];
 
   // Decode flags
   const bool power_on        = (status_cmd & BIT_POWER)          != 0;
@@ -842,8 +852,11 @@ void IntexSpa::data_management_() {
              "%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
              (int)state_filter_, (int)new_state_filter,
              (int)state_sanitizer_, (int)new_state_sanitizer,
-             data_[0],data_[1],data_[2],data_[3],data_[4],data_[5],data_[6],data_[7],data_[8],
-             data_[9],data_[10],data_[11],data_[12],data_[13],data_[14],data_[15],data_[16]);
+             pump_frame_snapshot_[0],pump_frame_snapshot_[1],pump_frame_snapshot_[2],pump_frame_snapshot_[3],
+             pump_frame_snapshot_[4],pump_frame_snapshot_[5],pump_frame_snapshot_[6],pump_frame_snapshot_[7],
+             pump_frame_snapshot_[8],pump_frame_snapshot_[9],pump_frame_snapshot_[10],pump_frame_snapshot_[11],
+             pump_frame_snapshot_[12],pump_frame_snapshot_[13],pump_frame_snapshot_[14],pump_frame_snapshot_[15],
+             pump_frame_snapshot_[16]);
   }
   state_filter_    = new_state_filter;
   state_sanitizer_ = new_state_sanitizer;
@@ -1081,7 +1094,7 @@ void IntexSpa::process_command_queue_() {
 
     bool state_confirmed = false;
     if (pending_toggle_bit_mask_ != 0) {
-      bool actual = (data_[BYTE_STATUS_COMMAND] & pending_toggle_bit_mask_) != 0;
+      bool actual = (pump_frame_snapshot_[BYTE_STATUS_COMMAND] & pending_toggle_bit_mask_) != 0;
       state_confirmed = (actual == pending_toggle_desired_state_);
     }
 
