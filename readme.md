@@ -54,6 +54,12 @@ external_components:
 ```
 
 ```yaml
+# A time provider
+time:
+  platform: homeassistant
+```
+
+```yaml
 # The LC12s interface
 uart:
   id: lc12s
